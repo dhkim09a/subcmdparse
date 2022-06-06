@@ -2,7 +2,7 @@ import argparse
 import sys
 from unittest import TestCase
 
-from subcmdparse.subcmdparse import Subcommand, SubcommandParser
+from subcmdparse import Subcommand, SubcommandParser
 
 
 class TestSubcommand(TestCase):
@@ -141,6 +141,58 @@ class TestSubcommand(TestCase):
         parser = SubcommandParser()
 
         parser.add_argument('-x', action='store_true', shared=True)
+
+        parser.add_subcommands(CmdA())
+
+        # parser.add_argument('-y', action='store_true', shared=True)
+
+        cmd = 'cmda'
+        # args = parser.parse_args([cmd, '-x', '-y'])
+        args = parser.parse_args([cmd, '-x'])
+        parser.exec_subcommands(args)
+
+    def test_shared_argument_group(self):
+        cmd = ''
+
+        class CmdA(Subcommand):
+            def on_parser_init(self, parser: argparse.ArgumentParser):
+                pass
+
+            def on_command(self, args):
+                assert cmd == 'cmda'
+
+                assert args.x
+
+        parser = SubcommandParser()
+
+        group = parser.add_argument_group(shared=True)
+        group.add_argument('-x', action='store_true')
+
+        parser.add_subcommands(CmdA())
+
+        # parser.add_argument('-y', action='store_true', shared=True)
+
+        cmd = 'cmda'
+        # args = parser.parse_args([cmd, '-x', '-y'])
+        args = parser.parse_args([cmd, '-x'])
+        parser.exec_subcommands(args)
+
+    def test_shared_exclusive_group(self):
+        cmd = ''
+
+        class CmdA(Subcommand):
+            def on_parser_init(self, parser: argparse.ArgumentParser):
+                pass
+
+            def on_command(self, args):
+                assert cmd == 'cmda'
+
+                assert args.x
+
+        parser = SubcommandParser()
+
+        group = parser.add_mutually_exclusive_group(shared=True)
+        group.add_argument('-x', action='store_true')
 
         parser.add_subcommands(CmdA())
 

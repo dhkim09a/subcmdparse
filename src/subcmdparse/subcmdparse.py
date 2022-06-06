@@ -111,8 +111,8 @@ class SubcommandParser(argparse.ArgumentParser):
             if not self.shared_parser:
                 self.shared_parser = argparse.ArgumentParser(add_help=False)
 
-            # for myself
-            super().add_argument(*args, **kwargs)
+            # # for myself
+            # super().add_argument(*args, **kwargs)
             # for my children
             return self.shared_parser.add_argument(*args, **kwargs)
 
@@ -123,10 +123,12 @@ class SubcommandParser(argparse.ArgumentParser):
             if not self.shared_parser:
                 self.shared_parser = argparse.ArgumentParser(add_help=False)
 
-            # for myself
-            super().add_argument_group(*args, **kwargs)
             # for my children
-            return self.shared_parser.add_argument_group(*args, **kwargs)
+            group = self.shared_parser.add_argument_group(*args, **kwargs)
+            # # for myself
+            # self._action_groups.append(group)
+
+            return group
 
         return super().add_argument_group(*args, **kwargs)
 
@@ -135,10 +137,12 @@ class SubcommandParser(argparse.ArgumentParser):
             if not self.shared_parser:
                 self.shared_parser = argparse.ArgumentParser(add_help=False)
 
-            # for myself
-            super().add_mutually_exclusive_group(*args, **kwargs)
             # for my children
-            return self.shared_parser.add_mutually_exclusive_group(*args, **kwargs)
+            group = self.shared_parser.add_mutually_exclusive_group(*args, **kwargs)
+            # # for myself
+            # self._mutually_exclusive_groups.append(group)
+
+            return group
 
         return super().add_mutually_exclusive_group(*args, **kwargs)
 
