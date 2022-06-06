@@ -118,7 +118,7 @@ class SubcommandParser(argparse.ArgumentParser):
 
         return super().add_argument(*args, **kwargs)
 
-    def add_argument_group(self, *args, shared: bool = False, **kwargs):
+    def add_argument_group(self, *args, shared: bool = False, **kwargs) -> argparse._ArgumentGroup:
         if shared:
             if not self.shared_parser:
                 self.shared_parser = argparse.ArgumentParser(add_help=False)
@@ -129,6 +129,18 @@ class SubcommandParser(argparse.ArgumentParser):
             return self.shared_parser.add_argument_group(*args, **kwargs)
 
         return super().add_argument_group(*args, **kwargs)
+
+    def add_mutually_exclusive_group(self, *args, shared: bool = False, **kwargs) -> argparse._MutuallyExclusiveGroup:
+        if shared:
+            if not self.shared_parser:
+                self.shared_parser = argparse.ArgumentParser(add_help=False)
+
+            # for myself
+            super().add_mutually_exclusive_group(*args, **kwargs)
+            # for my children
+            return self.shared_parser.add_mutually_exclusive_group(*args, **kwargs)
+
+        return super().add_mutually_exclusive_group(*args, **kwargs)
 
 
 class Subcommand:
