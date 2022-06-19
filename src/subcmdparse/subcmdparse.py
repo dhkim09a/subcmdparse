@@ -29,6 +29,25 @@ class TolerableSubParsersAction(argparse._SubParsersAction):
             getattr(namespace, argparse._UNRECOGNIZED_ARGS_ATTR).extend(values)
 
 
+class _HelpAllAction(argparse.Action):
+
+    def __init__(self,
+                 option_strings,
+                 dest=argparse.SUPPRESS,
+                 default=argparse.SUPPRESS,
+                 help=None):
+        super(_HelpAllAction, self).__init__(
+            option_strings=option_strings,
+            dest=dest,
+            default=default,
+            nargs=0,
+            help=help)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        parser.print_help()
+        parser.exit()
+
+
 class SubcommandParser(argparse.ArgumentParser):
     subparsers = None
     subcommands: list = None
@@ -37,6 +56,7 @@ class SubcommandParser(argparse.ArgumentParser):
 
     argcomplete: bool
     __allow_unknown_args: bool
+    add_help_all: bool
 
     __unknown_args: list = None
 
@@ -48,11 +68,21 @@ class SubcommandParser(argparse.ArgumentParser):
     def allow_unknown_args(self, val: bool):
         self.__allow_unknown_args = val
 
-    def __init__(self, *args, argcomplete: bool = False, **kwargs):
+    def __init__(self, *args, argcomplete: bool = False, add_help_all: bool = True, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.argcomplete = argcomplete
         self.allow_unknown_args = False
+        self.add_help_all = add_help_all
+
+        # add help argument if necessary
+        # (using explicit default to override global argument_default)
+        default_prefix = '-' if '-' in self.prefix_chars else self.prefix_chars[0]
+        if self.add_help:
+            self.add_argument(
+                default_prefix*2+'help'+default_prefix+'all',
+                action='help', default=argparse.SUPPRESS,
+                help=_('show this help message and exit'))
 
     def add_subcommands(self, *subcommands, title=None, required=True, help=None, metavar='SUBCOMMAND'):
         if not self.subparsers:
