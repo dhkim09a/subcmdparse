@@ -31,22 +31,41 @@ class TolerableSubParsersAction(argparse._SubParsersAction):
             getattr(namespace, argparse._UNRECOGNIZED_ARGS_ATTR).extend(values)
 
 
-class _HelpAllAction(argparse.Action):
+class _UsageAllAction(argparse.Action):
 
     def __init__(self,
                  option_strings,
                  dest=argparse.SUPPRESS,
                  default=argparse.SUPPRESS,
                  help=None):
-        super(_HelpAllAction, self).__init__(
+        super(_UsageAllAction, self).__init__(
             option_strings=option_strings,
             dest=dest,
             default=default,
             nargs=0,
             help=help)
 
+    # def print_help(self, parser: argparse.ArgumentParser, file=None, indent=''):
+    #     # message = parser.format_help()
+    #     message = parser.format_usage()
+    #     if indent:
+    #         lines = message.split('\n')
+    #         message = '\n'.join([indent + line for line in lines])
+    #     parser._print_message(message, file)
+
     def __call__(self, parser, namespace, values, option_string=None):
-        parser.print_help()
+        # depth first search
+        stack: list[tuple[SubcommandParser, int]] = []
+        stack.append((parser, 0))
+        while stack and (elm := stack.pop()):
+            parser, level = elm
+            # self.print_help(parser, indent='  ' * level)
+            # self.print_help(parser)
+            parser.print_usage()
+            if parser.subcommands:
+                to_push = [(subcmd.parser, level + 1) for subcmd in parser.subcommands]
+                to_push.reverse()
+                stack.extend(to_push)
         parser.exit()
 
 
@@ -82,9 +101,9 @@ class SubcommandParser(argparse.ArgumentParser):
         default_prefix = '-' if '-' in self.prefix_chars else self.prefix_chars[0]
         if self.add_help:
             self.add_argument(
-                default_prefix*2+'help'+default_prefix+'all',
-                action='help', default=argparse.SUPPRESS,
-                help=_('show this help message and exit'))
+                default_prefix*2+'usage'+default_prefix+'all',
+                action=_UsageAllAction, default=argparse.SUPPRESS,
+                help=_('show all subcommand usages recursively'))
 
     def add_subcommands(self, *subcommands, title=None, required=True, help=None, metavar='SUBCOMMAND'):
         if not self.subparsers:
@@ -220,3 +239,4 @@ class Subcommand:
         parserd_args = parser.parse_args(['subcmd', *cmdargs])
 
         parser.exec_subcommands(parserd_args)
+
