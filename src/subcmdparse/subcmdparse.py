@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from typing import Union, List
+from typing import Any, Optional, Union, List, Protocol, Callable, Type
 from gettext import gettext as _
 
 from .util import compile_shargs
@@ -12,6 +12,16 @@ try:
     import argcomplete
 except ImportError:
     pass
+
+
+class _Subcommand_on_command(Protocol):
+    def __call__(self, args: object, unknown_args: Optional[object] = None) -> Any:
+        pass
+
+
+class _InternalSubcmdArgs(Protocol):
+    _func: _Subcommand_on_command
+    _allow_unknown_args: bool
 
 
 class TolerableSubParsersAction(argparse._SubParsersAction):
@@ -53,7 +63,7 @@ class _UsageAllAction(argparse.Action):
     #         message = '\n'.join([indent + line for line in lines])
     #     parser._print_message(message, file)
 
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(self, parser: SubcommandParser, namespace, values, option_string=None):
         # depth first search
         stack: list[tuple[SubcommandParser, int]] = []
         stack.append((parser, 0))
@@ -70,16 +80,16 @@ class _UsageAllAction(argparse.Action):
 
 
 class SubcommandParser(argparse.ArgumentParser):
-    subparsers = None
-    subcommands: list = None
-    parent_shared_parsers: List[argparse.ArgumentParser] = None
-    shared_parser: argparse.ArgumentParser = None
+    subparsers: Optional[argparse._SubParsersAction] = None
+    subcommands: Optional[list[Subcommand]] = None
+    parent_shared_parsers: Optional[List[argparse.ArgumentParser]] = None
+    shared_parser: Optional[argparse.ArgumentParser] = None
 
     argcomplete: bool
     __allow_unknown_args: bool
     add_help_all: bool
 
-    __unknown_args: list = None
+    __unknown_args: Optional[list] = None
 
     @property
     def allow_unknown_args(self) -> bool:
@@ -105,14 +115,18 @@ class SubcommandParser(argparse.ArgumentParser):
                 action=_UsageAllAction, default=argparse.SUPPRESS,
                 help=_('show all subcommand usages recursively'))
 
-    def add_subcommands(self, *subcommands, title=None, required=True, help=None, metavar='SUBCOMMAND'):
+    def add_subcommands(self, *subcommands: Subcommand, title: Optional[str] = None, required: bool = True, help: Optional[str] = None, metavar: str = 'SUBCOMMAND'):
         if not self.subparsers:
+            kwargs = {}
+            if title:
+                kwargs['title'] = title
+            if self.allow_unknown_args:
+                kwargs['action'] = TolerableSubParsersAction
             self.subparsers = self.add_subparsers(
-                **{'title': title} if title else {},
                 required=required,
                 help=help,
                 metavar=metavar,
-                **{'action': TolerableSubParsersAction} if self.allow_unknown_args else {},
+                **kwargs,
             )
 
         if not self.subcommands:
@@ -123,6 +137,10 @@ class SubcommandParser(argparse.ArgumentParser):
     def _register_subcommands(self):
         if not self.subcommands:
             return
+        
+        # self.subparsers must not be None after self.add_subcommands()
+        assert self.subparsers
+
         for subcommand in self.subcommands:
             if not isinstance(subcommand, Subcommand):
                 raise TypeError(str(subcommand.__class__) + 'is not Subcommand')
@@ -137,7 +155,7 @@ class SubcommandParser(argparse.ArgumentParser):
         else:
             print('warning: install \'argcomplete\' package to enable bash autocomplete')
 
-    def parse_args(self, *args, **kwargs) -> any:
+    def parse_args(self, *args, **kwargs) -> _InternalSubcmdArgs:
         self._register_subcommands()
         if self.argcomplete:
             self.try_argcomplete()
@@ -148,7 +166,7 @@ class SubcommandParser(argparse.ArgumentParser):
         self.__unknown_args = unknown_args
         return parsed_args
 
-    def exec_subcommands(self, parsed_args: object = None):
+    def exec_subcommands(self, parsed_args: Optional[_InternalSubcmdArgs] = None):
         if not parsed_args:
             parsed_args = self.parse_args()
 
@@ -209,13 +227,14 @@ class Subcommand:
     def on_command(self, args, unknown_args=None):
         raise NotImplementedError
 
-    def _register(self, subparsers, parents: List[argparse.ArgumentParser] = None):
-        kwargs = {'help': self.help}
+    def _register(self, subparsers: argparse._SubParsersAction, parents: Optional[List[argparse.ArgumentParser]] = None):
+        kwargs: dict[str, Any] = {'help': self.help}
         if parents:
             kwargs['parents'] = parents
 
         self.parser = subparsers.add_parser(self.name, **kwargs)
         self.parser.__class__ = SubcommandParser
+        assert isinstance(self.parser, SubcommandParser)
         self.parser.parent_shared_parsers = parents
         self.on_parser_init(self.parser)
         self.parser._register_subcommands()
@@ -224,7 +243,7 @@ class Subcommand:
             _allow_unknown_args=self.parser.allow_unknown_args,
         )
 
-    def __init__(self, subparsers = None, name: str = None, help: str = '', dependency: Union[str, List[str]] = ''):
+    def __init__(self, subparsers: Optional[argparse._SubParsersAction] = None, name: Optional[str] = None, help: str = '', dependency: Union[str, List[str]] = ''):
         self.name = name if name else type(self).__name__.lower()
         self.help = help
         if subparsers:
