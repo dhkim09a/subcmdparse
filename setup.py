@@ -19,7 +19,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="subcmdparse", # Replace with your own username
-    version="0.1.7",
+    version="0.1.8",
     author="Donghwi Kim",
     author_email="dhkim09@kaist.ac.kr",
     description="Subcommand extension for argparse package",
