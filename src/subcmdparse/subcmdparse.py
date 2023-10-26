@@ -166,14 +166,14 @@ class SubcommandParser(argparse.ArgumentParser):
         self.__unknown_args = unknown_args
         return parsed_args
 
-    def exec_subcommands(self, parsed_args: Optional[_InternalSubcmdArgs] = None):
+    def exec_subcommands(self, parsed_args: Optional[_InternalSubcmdArgs] = None) -> Any:
         if not parsed_args:
             parsed_args = self.parse_args()
 
         if parsed_args._allow_unknown_args:
-            parsed_args._func(parsed_args, unknown_args=self.__unknown_args)
+            return parsed_args._func(parsed_args, unknown_args=self.__unknown_args)
         else:
-            parsed_args._func(parsed_args)
+            return parsed_args._func(parsed_args)
 
     def add_argument(self, *args, shared: bool = False, **kwargs):
         if shared:
@@ -250,12 +250,12 @@ class Subcommand:
             self._register(subparsers)
 
     @classmethod
-    def exec(cls, *args, **kwargs):
+    def exec(cls, *args, **kwargs) -> Any:
         cmdargs, shargs = compile_shargs(*args, **kwargs)
 
         parser = SubcommandParser()
         parser.add_subcommands(cls(name='subcmd'))
         parserd_args = parser.parse_args(['subcmd', *cmdargs])
 
-        parser.exec_subcommands(parserd_args)
+        return parser.exec_subcommands(parserd_args)
 
