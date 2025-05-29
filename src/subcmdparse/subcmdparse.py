@@ -220,6 +220,8 @@ class Subcommand:
     parser: SubcommandParser
     name: str
     help: str
+    cb_parser_init: Callable[[SubcommandParser], None] | None
+    cb_command: Callable[[object, Optional[object]], Any] | None
 
     def on_parser_init(self, parser: SubcommandParser):
         raise NotImplementedError
@@ -227,25 +229,47 @@ class Subcommand:
     def on_command(self, args, unknown_args=None):
         raise NotImplementedError
 
-    def _register(self, subparsers: argparse._SubParsersAction, parents: Optional[List[argparse.ArgumentParser]] = None):
-        kwargs: dict[str, Any] = {'help': self.help}
+    def _register(self,
+                  subparsers: argparse._SubParsersAction,
+                  parents: Optional[List[argparse.ArgumentParser]] = None,
+                #   add_help: bool = True,
+                  cb_parser_init: Callable[[SubcommandParser], None] | None = None,
+                  cb_command: Callable[[object, Optional[object]], Any] | None = None,
+                  ):
+        kwargs: dict[str, Any] = {}
+
+        kwargs['help'] = self.help
+
         if parents:
             kwargs['parents'] = parents
+            
+        kwargs['conflict_handler'] = 'resolve'
 
         self.parser = subparsers.add_parser(self.name, **kwargs)
         self.parser.__class__ = SubcommandParser
         assert isinstance(self.parser, SubcommandParser)
         self.parser.parent_shared_parsers = parents
-        self.on_parser_init(self.parser)
+        (self.cb_parser_init or self.on_parser_init)(self.parser)
         self.parser._register_subcommands()
         self.parser.set_defaults(
-            _func=self.on_command,
+            _func=(self.cb_command or self.on_command),
             _allow_unknown_args=self.parser.allow_unknown_args,
         )
 
-    def __init__(self, subparsers: Optional[argparse._SubParsersAction] = None, name: Optional[str] = None, help: str = '', dependency: Union[str, List[str]] = ''):
+    def __init__(self,
+                 subparsers: Optional[argparse._SubParsersAction] = None,
+                 name: Optional[str] = None,
+                 help: str = '',
+                 dependency: Union[str, List[str]] = '',
+                #  add_help: bool = True,
+                 cb_parser_init: Callable[[SubcommandParser], None] | None = None,
+                 cb_command: Callable[[object, Optional[object]], Any] | None = None,
+                 ):
         self.name = name if name else type(self).__name__.lower()
         self.help = help
+        self.cb_parser_init = cb_parser_init
+        self.cb_command = cb_command
+
         if subparsers:
             self._register(subparsers)
 
