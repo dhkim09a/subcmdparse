@@ -86,10 +86,26 @@ class SubcommandParser(argparse.ArgumentParser):
     shared_parser: Optional[argparse.ArgumentParser] = None
 
     argcomplete: bool
+    __add_help: bool = True
     __allow_unknown_args: bool
     add_help_all: bool
 
     __unknown_args: Optional[list] = None
+
+    @property
+    def add_help(self) -> bool:
+        return self.__add_help
+
+    @add_help.setter
+    def add_help(self, val: bool):
+        if val == self.__add_help:
+            return
+
+        if val:
+            self.add_argument('-h', '--help', action='help', help='show this help message and exit')
+        elif not val:
+            self.remove_argument('-h')
+        self.__add_help = val
 
     @property
     def allow_unknown_args(self) -> bool:
@@ -109,7 +125,7 @@ class SubcommandParser(argparse.ArgumentParser):
         # add help argument if necessary
         # (using explicit default to override global argument_default)
         default_prefix = '-' if '-' in self.prefix_chars else self.prefix_chars[0]
-        if self.add_help:
+        if self.add_help_all:
             self.add_argument(
                 default_prefix*2+'usage'+default_prefix+'all',
                 action=_UsageAllAction, default=argparse.SUPPRESS,
@@ -137,7 +153,7 @@ class SubcommandParser(argparse.ArgumentParser):
     def _register_subcommands(self):
         if not self.subcommands:
             return
-        
+
         # self.subparsers must not be None after self.add_subcommands()
         assert self.subparsers
 
@@ -164,7 +180,7 @@ class SubcommandParser(argparse.ArgumentParser):
             msg = _('unrecognized arguments: %s')
             self.error(msg % ' '.join(unknown_args))
         self.__unknown_args = unknown_args
-        return parsed_args
+        return parsed_args # type: ignore
 
     def exec_subcommands(self, parsed_args: Optional[_InternalSubcmdArgs] = None) -> Any:
         if not parsed_args:
@@ -215,6 +231,21 @@ class SubcommandParser(argparse.ArgumentParser):
 
         return super().add_mutually_exclusive_group(*args, **kwargs)
 
+    def remove_argument(self, arg: str):
+        for action in self._actions:
+            opts = action.option_strings
+            if (opts and (arg in opts)) or action.dest == arg:
+                for option_string in opts:
+                    self._option_string_actions.pop(option_string)
+                self._remove_action(action)
+                break
+
+        for action in self._action_groups:
+            for group_action in action._group_actions:
+                opts = group_action.option_strings
+                if (opts and (arg in opts)) or group_action.dest == arg:
+                    action._group_actions.remove(group_action)
+                    return
 
 class Subcommand:
     parser: SubcommandParser
@@ -232,7 +263,6 @@ class Subcommand:
     def _register(self,
                   subparsers: argparse._SubParsersAction,
                   parents: Optional[List[argparse.ArgumentParser]] = None,
-                #   add_help: bool = True,
                   cb_parser_init: Callable[[SubcommandParser], None] | None = None,
                   cb_command: Callable[[object, Optional[object]], Any] | None = None,
                   ):
@@ -242,7 +272,7 @@ class Subcommand:
 
         if parents:
             kwargs['parents'] = parents
-            
+
         kwargs['conflict_handler'] = 'resolve'
 
         self.parser = subparsers.add_parser(self.name, **kwargs)
@@ -260,8 +290,6 @@ class Subcommand:
                  subparsers: Optional[argparse._SubParsersAction] = None,
                  name: Optional[str] = None,
                  help: str = '',
-                 dependency: Union[str, List[str]] = '',
-                #  add_help: bool = True,
                  cb_parser_init: Callable[[SubcommandParser], None] | None = None,
                  cb_command: Callable[[object, Optional[object]], Any] | None = None,
                  ):
