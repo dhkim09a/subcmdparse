@@ -14,13 +14,17 @@ except ImportError:
     pass
 
 
+_Subcommand_on_Exception = Callable[[Exception], Any]
+
+
 class _Subcommand_on_command(Protocol):
-    def __call__(self, args: object, unknown_args: Optional[object] = None) -> Any:
+    def __call__(self, args: argparse.Namespace, unknown_args: list[str] | None = None) -> Any:
         pass
 
 
-class _InternalSubcmdArgs(Protocol):
+class _InternalSubcmdArgs(argparse.Namespace):
     _func: _Subcommand_on_command
+    _excp: _Subcommand_on_Exception | None
     _allow_unknown_args: bool
 
 
@@ -90,7 +94,7 @@ class SubcommandParser(argparse.ArgumentParser):
     __allow_unknown_args: bool
     add_help_all: bool
 
-    __unknown_args: Optional[list] = None
+    __unknown_args: list[str] | None = None
 
     @property
     def add_help(self) -> bool:
@@ -186,10 +190,16 @@ class SubcommandParser(argparse.ArgumentParser):
         if not parsed_args:
             parsed_args = self.parse_args()
 
-        if parsed_args._allow_unknown_args:
-            return parsed_args._func(parsed_args, unknown_args=self.__unknown_args)
-        else:
-            return parsed_args._func(parsed_args)
+        try:
+            if parsed_args._allow_unknown_args:
+                return parsed_args._func(parsed_args, unknown_args=self.__unknown_args)
+            else:
+                return parsed_args._func(parsed_args)
+        except Exception as e:
+            if parsed_args._excp:
+                return parsed_args._excp(e)
+            else:
+                raise
 
     def add_argument(self, *args, shared: bool = False, **kwargs):
         if shared:
@@ -252,19 +262,24 @@ class Subcommand:
     name: str
     help: str
     cb_parser_init: Callable[[SubcommandParser], None] | None
-    cb_command: Callable[[object, Optional[object]], Any] | None
+    cb_command: _Subcommand_on_command | None
+    cb_exception: _Subcommand_on_Exception | None
 
-    def on_parser_init(self, parser: SubcommandParser):
+    def on_parser_init(self, parser: SubcommandParser) -> Any:
         raise NotImplementedError
 
-    def on_command(self, args, unknown_args=None):
+    def on_command(self, args: argparse.Namespace, unknown_args: list[str] | None = None) -> Any:
         raise NotImplementedError
+    
+    def on_exception(self, exc: Exception) -> Any:
+        raise
 
     def _register(self,
                   subparsers: argparse._SubParsersAction,
                   parents: Optional[List[argparse.ArgumentParser]] = None,
-                  cb_parser_init: Callable[[SubcommandParser], None] | None = None,
-                  cb_command: Callable[[object, Optional[object]], Any] | None = None,
+                #   cb_parser_init: Callable[[SubcommandParser], None] | None = None,
+                #   cb_command: _Subcommand_on_command | None = None,
+                #   cb_exception: _Subcommand_on_Exception | None = None,
                   ):
         kwargs: dict[str, Any] = {}
 
@@ -283,6 +298,7 @@ class Subcommand:
         self.parser._register_subcommands()
         self.parser.set_defaults(
             _func=(self.cb_command or self.on_command),
+            _excp=(self.cb_exception or self.on_exception),
             _allow_unknown_args=self.parser.allow_unknown_args,
         )
 
@@ -291,12 +307,14 @@ class Subcommand:
                  name: Optional[str] = None,
                  help: str = '',
                  cb_parser_init: Callable[[SubcommandParser], None] | None = None,
-                 cb_command: Callable[[object, Optional[object]], Any] | None = None,
+                 cb_command: _Subcommand_on_command | None = None,
+                 cb_exception: _Subcommand_on_Exception | None = None,
                  ):
         self.name = name if name else type(self).__name__.lower()
         self.help = help
         self.cb_parser_init = cb_parser_init
         self.cb_command = cb_command
+        self.cb_exception = cb_exception
 
         if subparsers:
             self._register(subparsers)
