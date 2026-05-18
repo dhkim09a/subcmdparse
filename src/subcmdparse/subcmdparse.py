@@ -95,6 +95,7 @@ class SubcommandParser(argparse.ArgumentParser):
     add_help_all: bool
 
     __unknown_args: list[str] | None = None
+    __registered: Optional[set] = None
 
     @property
     def add_help(self) -> bool:
@@ -161,13 +162,19 @@ class SubcommandParser(argparse.ArgumentParser):
         # self.subparsers must not be None after self.add_subcommands()
         assert self.subparsers
 
+        if self.__registered is None:
+            self.__registered = set()
+
         for subcommand in self.subcommands:
             if not isinstance(subcommand, Subcommand):
                 raise TypeError(str(subcommand.__class__) + 'is not Subcommand')
+            if id(subcommand) in self.__registered:
+                continue
             subcommand._register(self.subparsers,
                                  parents=[*(self.parent_shared_parsers if self.parent_shared_parsers else []),
                                           *([self.shared_parser] if self.shared_parser else [])],
                                  )
+            self.__registered.add(id(subcommand))
 
     def try_argcomplete(self):
         if 'argcomplete' in globals():
